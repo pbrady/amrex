@@ -29,6 +29,9 @@ public:
     AmrCore ();
     AmrCore (const RealBox* rb, int max_level_in, const Array<int>& n_cell_in, int coord);
 
+    AmrCore (const AmrCore& rhs) = delete;
+    AmrCore& operator= (const AmrCore& rhs) = delete;
+
     virtual ~AmrCore ();
 
     int Verbose () const { return verbose; }
@@ -124,19 +127,31 @@ protected:
 
     //! Make a new level from scratch using provided BoxArray and DistributionMapping.
     //! Only used during initialization.
-    virtual void MakeNewLevelFromScratch (int lev, Real time, const BoxArray& ba, const DistributionMapping& dm) = 0;
+    virtual void MakeNewLevelFromScratch (int lev, Real time, const BoxArray& ba,
+                                          const DistributionMapping& dm)
+        { amrex::Abort("MakeNewLevelFromScratch needs to be implemented by derived class"); }
 
     //! Make a new level using provided BoxArray and DistributionMapping and fill with interpolated coarse level data.
-    virtual void MakeNewLevelFromCoarse (int lev, Real time, const BoxArray& ba, const DistributionMapping& dm) = 0;
+    //! Used during regrid.
+    virtual void MakeNewLevelFromCoarse (int lev, Real time, const BoxArray& ba,
+                                         const DistributionMapping& dm)
+        { amrex::Abort("MakeNewLevelFromCoarse needs to be implemented by derived class"); }
 
     //! Remake an existing level using provided BoxArray and DistributionMapping and fill with existing fine and coarse data.
-    virtual void RemakeLevel (int lev, Real time, const BoxArray& ba, const DistributionMapping& dm) = 0;
+    //! Used during regrid.
+    virtual void RemakeLevel (int lev, Real time, const BoxArray& ba,
+                              const DistributionMapping& dm)
+        { amrex::Abort("RemakeLevel needs to be implemented by derived class"); }
 
     //! Delete level data
-    virtual void ClearLevel (int lev) = 0;
+    //! Used during regrid.
+    virtual void ClearLevel (int lev)
+        { amrex::Abort("ClearLevel needs to be implemented by derived class"); }        
 
     //! Tagging cells for refinement
-    virtual void ErrorEst (int lev, TagBoxArray& tags, Real time, int ngrow) = 0;
+    //! Used during regrid.
+    virtual void ErrorEst (int lev, TagBoxArray& tags, Real time, int ngrow)
+        { amrex::Abort("ErrorEst needs to be implemented by derived class"); }
 
     virtual BoxArray GetAreaNotToTag (int lev) { return BoxArray(); }
     virtual void ManualTagsPlacement (int lev, TagBoxArray& tags, Array<IntVect>& bf_lev) {}
@@ -169,12 +184,6 @@ protected:
     Array<BoxArray>            grids;    
 
 private:
-    //
-    // Disallowed
-    //
-    AmrCore (const AmrCore& rhs);
-    AmrCore& operator= (const AmrCore& rhs);
-
     void InitAmrCore (int max_level_in, const Array<int>& n_cell_in);
 };
 
