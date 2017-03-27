@@ -10,14 +10,8 @@ class TracerParticleContainer
 {
 public:
 
-    TracerParticleContainer (ParGDBBase* gdb)
+    TracerParticleContainer (AmrParGDB* gdb)
 	: ParticleContainer<BL_SPACEDIM>(gdb)
-	{}
-
-    TracerParticleContainer (const Geometry            & geom, 
-			     const DistributionMapping & dmap,
-			     const BoxArray            & ba)
-	: ParticleContainer<BL_SPACEDIM>(geom,dmap,ba)
 	{}
 
     ~TracerParticleContainer () {}

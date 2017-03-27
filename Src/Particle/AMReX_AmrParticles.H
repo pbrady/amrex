@@ -7,7 +7,7 @@
 
 namespace amrex {
 
-  template <int NR, int NI=0, int NA=0>
+template <int NR, int NI=0, int NA=0>
 class AmrParticleContainer
     : public ParticleContainer<NR, NI, NA>
 {

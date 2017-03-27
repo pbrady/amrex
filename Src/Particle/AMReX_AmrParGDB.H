@@ -1,13 +1,13 @@
 #ifndef _AmrParGDB_H
 #define _AmrParGDB_H
 
-#include <AMReX_ParGDB.H>
+#include <AMReX_Geometry.H>
+#include <AMReX_MultiFab.H>
 #include <AMReX_AmrCore.H>
 
 namespace amrex {
 
 class AmrParGDB
-    : public ParGDBBase
 {
 public:
 
@@ -17,28 +17,28 @@ public:
 	  m_ba(amr->maxLevel()+1)
 	{ }
 
-    virtual ~AmrParGDB () {;}
+    ~AmrParGDB () {;}
     
-    virtual const Geometry& Geom (int level) const override;
-    virtual const DistributionMapping& ParticleDistributionMap 
-                                             (int level) const override;
-    virtual const DistributionMapping&         DistributionMap 
-                                             (int level) const override;
-    virtual const BoxArray& ParticleBoxArray (int level) const override;
-    virtual const BoxArray&         boxArray (int level) const override;
+    const Geometry& Geom (int level) const;
+    const DistributionMapping& ParticleDistributionMap (int level) const;
+    const DistributionMapping&         DistributionMap (int level) const;
+    const BoxArray&            ParticleBoxArray (int level) const;
+    const BoxArray&                    boxArray (int level) const;
 
-    virtual void SetParticleBoxArray (int level, const BoxArray& new_ba) override;
-    virtual void SetParticleDistributionMap (int level,	const DistributionMapping& new_dm) override;
+    void SetParticleBoxArray (int level, const BoxArray& new_ba);
+    void SetParticleDistributionMap (int level,	const DistributionMapping& new_dm);
 
-    virtual void ClearParticleBoxArray (int level) override;
-    virtual void ClearParticleDistributionMap (int level) override;
+    void ClearParticleBoxArray (int level);
+    void ClearParticleDistributionMap (int level);
 
-    virtual bool LevelDefined (int level) const override;
-    virtual int finestLevel () const override;
-    virtual int maxLevel () const override;
+    bool LevelDefined (int level) const;
+    int finestLevel () const;
+    int maxLevel () const;
 
-    virtual IntVect refRatio (int level) const override;
-    virtual int MaxRefRatio (int level) const override;
+    IntVect refRatio (int level) const;
+    int MaxRefRatio (int level) const;
+
+    bool OnSameGrids (int level, const MultiFab& mf) const;
 
 protected:
     AmrCore* m_amrcore;
@@ -146,6 +146,14 @@ int
 AmrParGDB::MaxRefRatio (int level) const
 {
     return m_amrcore->MaxRefRatio(level);
+}
+
+inline
+bool
+AmrParGDB::OnSameGrids (int level, const MultiFab& mf) const
+{
+    return (mf.DistributionMap() == ParticleDistributionMap(level) &&
+	    mf.boxArray().CellEqual(ParticleBoxArray(level)));
 }
 
 }

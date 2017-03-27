@@ -24,11 +24,6 @@ set(F90_header_files)
 
 set(F77_source_files)
 
-# These files are in Particle
-if(BL_USE_PARTICLES EQUAL 1)
-  list(APPEND CXX_header_files AMReX_AmrParGDB.H AMReX_AmrParticles.H)
-endif()
-
 preprocess_boxlib_fortran(FPP_out_files ${FPP_source_files})
 
 set(local_source_files ${FPP_out_files} ${F77_source_files} ${F90_source_files} ${CXX_source_files})

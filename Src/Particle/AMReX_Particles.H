@@ -17,7 +17,7 @@
 #include <type_traits>
 
 #include <AMReX_ParmParse.H>
-#include <AMReX_ParGDB.H>
+#include <AMReX_AmrParGDB.H>
 #include <AMReX_REAL.H>
 #include <AMReX_IntVect.H>
 #include <AMReX_Array.H>
@@ -333,7 +333,7 @@ public:
         Initialize ();
     }
 
-    ParticleContainer (ParGDBBase* gdb)
+    ParticleContainer (AmrParGDB* gdb)
         :
         communicate_comp(NA, true),
 	m_verbose(0),
@@ -344,66 +344,14 @@ public:
         reserveData();
         resizeData();
     }
-  
-    ParticleContainer (const Geometry            & geom, 
-		       const DistributionMapping & dmap,
-		       const BoxArray            & ba)
-	:
-        communicate_comp(NA, true),
-        m_verbose(0), 
-	allow_particles_near_boundary(false),
-	m_gdb_object(geom,dmap,ba)
-    {
-        Initialize ();
-        m_gdb = & m_gdb_object;
-        reserveData();
-        resizeData();
-    }
-
-    ParticleContainer (const Array<Geometry>            & geom, 
-		       const Array<DistributionMapping> & dmap,
-		       const Array<BoxArray>            & ba,
-		       const Array<int>                 & rr)
-	:
-        communicate_comp(NA, true),
-        m_verbose(0), 
-	allow_particles_near_boundary(false),
-	m_gdb_object(geom,dmap,ba,rr)
-    {
-        Initialize ();
-        m_gdb = & m_gdb_object;
-        reserveData();
-        resizeData();
-    }
 
     ~ParticleContainer () {}
 
-    void Define (ParGDBBase* gdb)
+    void Define (AmrParGDB* gdb)
     {
         m_gdb = gdb;
         reserveData();
         resizeData();
-    }
-
-    void Define (const Geometry            & geom, 
-		 const DistributionMapping & dmap,
-		 const BoxArray            & ba)
-  {
-      m_gdb_object = ParGDB(geom, dmap, ba);
-      m_gdb = &m_gdb_object;
-      reserveData();
-      resizeData();
-  }
-
-    void Define (const Array<Geometry>            & geom, 
-		 const Array<DistributionMapping> & dmap,
-		 const Array<BoxArray>            & ba,
-		 const Array<int>                 & rr)
-    {
-	m_gdb_object = ParGDB(geom, dmap, ba, rr);
-	m_gdb = &m_gdb_object;
-        reserveData();
-	resizeData();
     }
 
     void SetParticleBoxArray (int lev, const BoxArray& new_ba)
@@ -425,7 +373,7 @@ public:
     
     int numLocalTilesAtLevel (int lev) const { return m_particles[lev].size(); }
 
-    const ParGDBBase* GetParGDB () const { return m_gdb; }
+    const AmrParGDB* GetParGDB () const { return m_gdb; }
 
     void reserveData();
     void resizeData();
@@ -665,9 +613,8 @@ protected:
     // The member data.
     //
     int         m_verbose;
-    ParGDBBase* m_gdb;
+    AmrParGDB*  m_gdb;
     bool        allow_particles_near_boundary;
-    ParGDB      m_gdb_object;
     
 private:
     void AssignDensityDoit (int rho_index, 
