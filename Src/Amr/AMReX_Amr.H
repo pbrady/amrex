@@ -14,10 +14,6 @@
 
 #include <AMReX_AmrCore.H>
 
-#ifdef USE_STATIONDATA
-#include <AMReX_StationData.H>
-#endif
-
 namespace amrex {
 
 class AmrLevel;
@@ -361,10 +357,6 @@ protected:
                         int           min_lev,
                         int           max_lev);
 
-    void printGridSummary (std::ostream& os,
-                           int           min_lev,
-                           int           max_lev);
-
     void setRecordGridInfo (const std::string&);
 
     void setRecordRunInfo (const std::string&);
@@ -409,10 +401,6 @@ protected:
     std::string      small_plot_file_root;  // Root name of small plotfile.
 
     int              which_level_being_advanced; // Only >=0 if we are in Amr::timeStep(level,...)
-
-#ifdef USE_STATIONDATA
-    StationData      station;
-#endif
 
     int              record_grid_info;
     int              record_run_info;

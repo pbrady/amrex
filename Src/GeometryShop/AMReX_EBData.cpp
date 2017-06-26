@@ -15,12 +15,26 @@
 #include "AMReX_EBISBox.H"
 #include "AMReX_PolyGeom.H"
 #include "AMReX_EBDataVarMacros.H"
+#include "AMReX_parstream.H"
 
 namespace amrex
 {
-  void null_deleter(EBDataImplem *)
+
+  bool EBDataImplem::s_verbose = false;
+
+
+//  static const IntVect ebd_ivlo(D_DECL(33,13, 0));
+//  static const IntVect ebd_ivhi(D_DECL(33,14, 0));
+//  static const VolIndex ebd_vlo(ebd_ivlo, 0);
+//  static const VolIndex ebd_vhi(ebd_ivhi, 0);
+//  static const FaceIndex ebd_face(ebd_vlo,ebd_vhi, 1);
+  static const IntVect ebd_ivlobox(D_DECL(32, 16, 0));
+  static const IntVect ebd_ivhibox(D_DECL(47, 23, 0));
+  static const Box ebd_box(ebd_ivlobox, ebd_ivhibox);
+
+  void null_deleter_ebdi(EBDataImplem *)
  {}
-/************************/
+ /************************/
   void 
   EBDataImplem::
   addFullIrregularVoFs(const IntVectSet     &    a_vofsToChange,
@@ -32,7 +46,12 @@ namespace amrex
     {
       //calculate set by adding in new intvects
       const IntVectSet& ivsOld = m_volData.getIVS();
-      IntVectSet ivsNew = m_graph.getIrregCells(m_region);
+      IntVectSet ivsIrreg = m_graph.getIrregCells(m_region);
+      IntVectSet ivscomp1 = ivsIrreg;
+      ivscomp1 -= ivsOld;
+      IntVectSet ivscomp2 = ivsOld;
+      ivscomp2 -= ivsIrreg;
+      IntVectSet ivsNew = ivsOld;
       ivsNew |= a_vofsToChange;
 
       int nfaccomp = F_FACENUMBER;
@@ -54,11 +73,11 @@ namespace amrex
 
       //redefine member data with new IVS and copy old data back
       //into it.
-      m_volData.define(ivsNew, m_graph, 1);
+      m_volData.define(ivsNew, m_graph, V_VOLNUMBER);
       m_volData.copy(oldVolData, minBox, 0, minBox, 0, nvolcomp);
       for (int idir = 0; idir < SpaceDim; idir++)
       {
-        m_faceData[idir].define(ivsNew, m_graph, idir, 1);
+        m_faceData[idir].define(ivsNew, m_graph, idir, F_FACENUMBER);
         m_faceData[idir].copy(oldFaceData[idir], minBox, 0, minBox, 0, nfaccomp);
       }
 
@@ -132,9 +151,10 @@ namespace amrex
             }
            }
           m_faceData[idir](faceit(), F_AREAFRAC) = areaFrac;
-          for (int idir = 0; idir < SpaceDim; idir++)
+          //idir = face direction, jdir= centroid direction
+          for (int jdir = 0; jdir < SpaceDim; jdir++)
           {
-            m_faceData[idir](faceit(), F_FACECENTROIDX+idir) = faceCentroid[idir];
+            m_faceData[idir](faceit(), F_FACECENTROIDX+jdir) = faceCentroid[idir];
           }
         }
       }
@@ -197,8 +217,16 @@ namespace amrex
     m_volData.define(ivsIrreg, a_graph, V_VOLNUMBER);
     for (int idir = 0; idir < SpaceDim; idir++)
     {
-      m_faceData[idir].define(ivsIrreg, a_graph, idir, F_FACENUMBER);
+      //this directional grow is to accomodate the fact that there 
+      //might be an irregular cell lurking on the other side of region
+      //and it will have faces that EBData will have to own.
+      Box regionG1D = a_region;
+      regionG1D.grow(idir, 1);
+      regionG1D &= a_graph.getDomain();
+      IntVectSet ivsIrregG1D = a_graph.getIrregCells(regionG1D);
+      m_faceData[idir].define(ivsIrregG1D, a_graph, idir, F_FACENUMBER);
     }
+
   }
 /************************/
   void
@@ -491,6 +519,7 @@ namespace amrex
 
     IntVectSet ivsIrreg = a_coarGraph.getIrregCells(a_validRegion);
     Box fineRegion = a_fineGraph.getRegion();
+
     if (a_coarGraph.hasIrregular())
     {
       for (int faceDir = 0; faceDir < SpaceDim; faceDir++)
@@ -711,38 +740,161 @@ namespace amrex
       }
     }
   }
+/******************/
+  /// Below lies serialization land.  Enter at thy own risk.
+  /// Management is not responsible for any gibbering madness resulting 
+  /// from ignoring this warning.
 /*******************************/
   std::size_t 
   EBDataImplem::
-  nBytes (const Box& bx, int start_comp, int ncomps) const
+  nBytes (const Box& bx, int a_srccomp, int a_ncomps) const
   {
-    amrex::Error("not implemented");
-    return 0;
+
+    size_t retval = m_volData.nBytes(bx, 0, V_VOLNUMBER);
+    for(int idir = 0; idir < SpaceDim; idir++)
+    {
+      retval += m_faceData[idir].nBytes(bx, 0, F_FACENUMBER);
+    }
+
+    return retval;
   }
 /*******************************/
 
   std::size_t 
   EBDataImplem::
-  copyToMem (const Box& srcbox,
+  copyToMem (const Box& bx,
              int        srccomp,
-             int        numcomp,
+             int        ncomps,
              void*      dst) const
   {
-    amrex::Error("not implemented");
-    return 0;
+
+    size_t retval = 0;
+    unsigned char* buf = (unsigned char*) dst;
+
+    size_t incrval = m_volData.copyToMem(bx, 0, V_VOLNUMBER, buf);
+    retval += incrval;
+    buf    += incrval;
+
+    for(int idir = 0; idir < SpaceDim; idir++)
+    {
+
+      incrval = m_faceData[idir].copyToMem(bx, 0, F_FACENUMBER, buf);
+
+      retval += incrval;
+      buf    += incrval;
+
+    }
+
+    return retval;
   }
 
 /*******************************/
 
   std::size_t 
   EBDataImplem::
-  copyFromMem (const Box&  dstbox,
+  copyFromMem (const Box&  bx,
                int         dstcomp,
                int         numcomp,
                const void* src)
   {
-    amrex::Error("not implemented");
-    return 0;
+
+    size_t retval = 0;
+    unsigned char* buf = (unsigned char*) src;
+
+
+    size_t incrval = m_volData.copyFromMem(bx, 0, V_VOLNUMBER, buf);
+    retval += incrval;
+    buf    += incrval;
+
+    for(int idir = 0; idir < SpaceDim; idir++)
+    {
+
+      incrval = m_faceData[idir].copyFromMem(bx, 0, F_FACENUMBER, buf);
+      retval += incrval;
+      buf    += incrval;
+
+    }
+
+    return retval;
+  }
+/*******************************/
+  std::size_t 
+  EBDataImplem::
+  nBytesFull() const
+  {
+    //first the region
+    size_t retval = m_region.linearSize();
+    retval +=   m_graph.nBytesFull();
+    retval += m_volData.nBytesFull();
+    for(int idir = 0; idir < SpaceDim; idir++)
+    {
+      retval += m_faceData[idir].nBytesFull();
+    }
+    return retval;
+  }
+/*******************************/
+
+  std::size_t 
+  EBDataImplem::
+  copyToMemFull(void* dst) const
+  {
+    size_t retval  = 0;
+    size_t incrval = 0;
+    unsigned char* buf = (unsigned char*) dst;
+    m_region.linearOut(buf);
+    incrval = m_region.linearSize();
+    buf += incrval;
+    retval += incrval;
+
+    incrval = m_graph.copyToMemFull(buf);
+    retval += incrval;
+    buf    += incrval;
+
+    incrval = m_volData.copyToMemFull(buf);
+    retval += incrval;
+    buf    += incrval;
+
+    for(int idir = 0; idir < SpaceDim; idir++)
+    {
+      incrval = m_faceData[idir].copyToMemFull(buf);
+      retval += incrval;
+      buf    += incrval;
+    }
+    return retval;
+  }
+
+/*******************************/
+
+  std::size_t 
+  EBDataImplem::
+  copyFromMemFull(const void* src)
+  {
+    
+    size_t retval  = 0;
+    size_t incrval = 0;
+    unsigned char* buf = (unsigned char*) src;
+    m_region.linearIn(buf);
+    incrval = m_region.linearSize();
+    buf += incrval;
+    retval += incrval;
+
+    incrval = m_graph.copyFromMemFull(buf);
+    retval += incrval;
+    buf    += incrval;
+
+    incrval = m_volData.copyFromMemFull(buf);
+    retval += incrval;
+    buf    += incrval;
+
+    for(int idir = 0; idir < SpaceDim; idir++)
+    {
+      incrval = m_faceData[idir].copyFromMemFull(buf);
+      retval += incrval;
+      buf    += incrval;
+    }
+
+    m_isDefined = true;
+    return retval;
   }
 
 /*******************************/

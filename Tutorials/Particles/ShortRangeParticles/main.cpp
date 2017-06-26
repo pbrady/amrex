@@ -32,28 +32,29 @@ int main(int argc, char* argv[])
     IntVect domain_hi(AMREX_D_DECL(size - 1, size - 1, size - 1));
     const Box domain(domain_lo, domain_hi);
     
-    int coord = 0;
     int is_per[BL_SPACEDIM];
     for (int i = 0; i < BL_SPACEDIM; i++) 
         is_per[i] = 0; 
-    Geometry geom(domain, &real_box, coord, is_per);
+    Geometry geom(domain, &real_box, CoordSys::cartesian, is_per);
     
     BoxArray ba(domain);
     ba.maxSize(max_grid_size);
     
     DistributionMapping dmap(ba);
    
-    int num_ghost = 1;
-    ShortRangeParticleContainer myPC(geom, dmap, ba, num_ghost);
+    int num_neighbor_cells = 1;
+    ShortRangeParticleContainer myPC(geom, dmap, ba, num_neighbor_cells);
+
+    std::cout << sizeof(ShortRangeParticleContainer::ParticleType) << std::endl;
 
     myPC.InitParticles();
 
     for (int i = 0; i < max_step; i++) {
         if (write_particles) myPC.writeParticles(i);
         
-        myPC.fillGhosts();
+        myPC.fillNeighbors();
         myPC.computeForces();
-        myPC.clearGhosts();
+        myPC.clearNeighbors();
 
         myPC.moveParticles(dt);
 

@@ -38,6 +38,8 @@ namespace amrex
         
     ///sure hope this does not matter
     typedef int value_type;
+
+    
     ///
     /**
        The EBGraphImplem can be all regular or all
@@ -45,11 +47,15 @@ namespace amrex
     */
     enum TAG
     {
-      AllRegular = 0,
-      AllCovered,
+      AllCovered = 0,
+      AllRegular, 
       HasIrregular
     };
-        
+
+    
+    ///
+    static bool preAllocatable () { return false; }
+
     ///
     /**
        Makes an EBGraphImplem whose contents are undefined.
@@ -242,19 +248,27 @@ namespace amrex
       }
         
         
-    std::size_t nBytes () const
-      {
-        return nBytes(m_region, 0, 1);
-      }
-        
+    //this includes all meta data
+    std::size_t nBytesFull() const;
+
+
+    //this includes all meta data
+    std::size_t copyToMemFull(void*      dst) const;
+
+    //this includes all meta data
+    std::size_t copyFromMemFull(const void* src);
+
+    //this is for copy and fillboundary where all the meta data has been filled
     std::size_t nBytes (const Box& bx, int start_comp, int ncomps) const;
         
+    //this is for copy and fillboundary where all the meta data has been filled
     std::size_t copyToMem (const Box& srcbox,
                            int        srccomp,
                            int        numcomp,
                            void*      dst) const;
         
         
+    //this is for copy and fillboundary where all the meta data has been filled
     std::size_t copyFromMem (const Box&  dstbox,
                              int         dstcomp,
                              int         numcomp,
@@ -345,8 +359,19 @@ namespace amrex
         std::vector<VolIndex> vofs = getVoFs(a_iv);
         return vofs.size();
       }
+    const IntVectSet& getAllIrregCells() const
+      {
+        return m_irregIVS;
+      }
+    const IntVectSet& getAllMultiCells() const
+      {
+        return m_multiIVS;
+      }
   private:
-        
+
+    ///for serialization
+    GraphNode getGraphNode(const IntVect& a_iv) const;
+
     ///box over which this graph is defined
     Box m_region;
         
@@ -376,10 +401,10 @@ namespace amrex
     bool m_isDomainSet;
         
     ///
-    IntVectSet* m_irregIVS;
+    IntVectSet m_irregIVS;
         
     ///
-    IntVectSet* m_multiIVS;
+    IntVectSet m_multiIVS;
         
         
     //mutable because it gets built when needed
@@ -639,7 +664,8 @@ namespace amrex
         return *this;
       }
         
-        
+
+    /// this is for copy and fillboundary where the meta data has already been filled
     std::size_t copyToMem (const Box& srcbox,
                            int        srccomp,
                            int        numcomp,
@@ -649,6 +675,7 @@ namespace amrex
       }
         
         
+    /// this is for copy and fillboundary where the meta data has already been filled
     std::size_t copyFromMem (const Box&  dstbox,
                              int         dstcomp,
                              int         numcomp,
@@ -657,15 +684,42 @@ namespace amrex
         return m_implem->copyFromMem(dstbox, dstcomp, numcomp, src);
       }
         
-    //! Returns how many bytes used
-    std::size_t nBytes () const
-      {
-        return nBytes(m_implem->getRegion(), 0, 1);
-      }
-        
+
+    /// this is for copy and fillboundary where the meta data has already been filled
     std::size_t nBytes (const Box& bx, int start_comp, int ncomps) const
       {
         return m_implem->nBytes(bx, start_comp, ncomps);
+      }
+
+
+    ///this includes all meta data
+    std::size_t copyToMemFull(void*      dst) const
+      {
+        return m_implem->copyToMemFull(dst);
+      }
+        
+        
+
+    ///this includes all meta data
+    std::size_t copyFromMemFull(const void* src)
+      {
+        return m_implem->copyFromMemFull(src);
+      }
+        
+
+    const IntVectSet& getAllIrregCells() const
+      {
+        return m_implem->getAllIrregCells();
+      }
+    const IntVectSet& getAllMultiCells() const
+      {
+        return m_implem->getAllMultiCells();
+      }
+
+    ///this includes all meta data
+    std::size_t nBytesFull() const
+      {
+        return m_implem->nBytesFull();
       }
         
     ///
@@ -740,11 +794,12 @@ namespace amrex
         
     ///
     /**
+       This resizes the BaseFab to cover getRegion
        1 = regular
        0 = irregular
        -1 = covered
     */
-    //void fillIntMask(BaseFab<int>& a_mask) const;
+    void fillIntMask(BaseFab<int>& a_mask) const;
         
         
     ///
@@ -771,6 +826,8 @@ namespace amrex
     ///
     std::vector<FaceIndex> getMultiValuedFaces(const int& a_idir, const Box& a_box) const;
         
+    ///
+    static bool preAllocatable () { return false; }
         
   private:
         

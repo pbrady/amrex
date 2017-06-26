@@ -1,6 +1,7 @@
 #ifndef BL_AMRCORE_H_
 #define BL_AMRCORE_H_
 
+#include <ostream>
 #include <memory>
 
 #include <AMReX_AmrMesh.H>
@@ -50,8 +51,11 @@ public:
     static void Initialize ();
     static void Finalize ();
 
+    void printGridSummary (std::ostream& os, int min_lev, int max_lev) const;
+
 protected:
 
+    //! Tag cells for refinement.  TagBoxArray tags is built on level lev grids.
     virtual void ErrorEst (int lev, TagBoxArray& tags, Real time, int ngrow) override = 0;
 
     //! Make a new level from scratch using provided BoxArray and DistributionMapping.

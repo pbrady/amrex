@@ -20,10 +20,81 @@
 #include "AMReX_PolyGeom.H"
 #include "AMReX_EBDataFactory.H"
 #include "AMReX_FaceIterator.H"
+#include "AMReX_FabArrayIO.H"
+#include "AMReX_Utility.H"
 
 
 namespace amrex
 {
+  void 
+  EBISLevel::
+  write(const string& a_dirname) const
+  {
+    //this creates the directory of all the stuff
+    UtilCreateDirectoryDestructive(a_dirname, true);
+    writeHeader(a_dirname);
+    string graphdirname = a_dirname + "/_graph";
+    string  datadirname = a_dirname + "/_data";
+    UtilCreateDirectoryDestructive(graphdirname, true);
+    UtilCreateDirectoryDestructive( datadirname, true);
+    FabArrayIO<EBGraph>::write(m_graph, graphdirname);
+    FabArrayIO<EBData >::write(m_data ,  datadirname);
+  }
+
+
+  void 
+  EBISLevel::
+  read(const string& a_dirname)
+  {
+    readHeader(a_dirname);
+    string graphdirname = a_dirname + "/_graph";
+    string  datadirname = a_dirname + "/_data";
+
+    FabArrayIO<EBGraph>::read(m_graph, graphdirname);
+    FabArrayIO<EBData >::read(m_data ,  datadirname);
+  }
+  void 
+  EBISLevel::
+  writeHeader(const string& a_dirname) const
+  {
+    std::ofstream headerfile;
+    string filename = a_dirname + string("/headerfile");
+    headerfile.open(filename.c_str(), std::ios::out | std::ios::trunc);
+    headerfile << m_nCellMax << endl;
+    headerfile << m_domain  << endl;
+    headerfile << m_origin  << endl;
+    headerfile << m_dx  << endl;
+
+    //why box array has to be weird, who knows?
+    //putting this last because it probably leaves the is in the wrong
+    //place
+    m_grids.writeOn(headerfile);
+
+    headerfile.flush();
+    headerfile.close();
+  }
+
+
+  void 
+  EBISLevel::
+  readHeader(const string& a_dirname)
+  {
+    std::ifstream headerfile;
+    string filename = a_dirname + string("/headerfile");
+    headerfile.open(filename.c_str(), std::ios::in);
+    headerfile >> m_nCellMax;
+    headerfile >> m_domain;
+    headerfile >> m_origin;
+    headerfile >> m_dx;
+
+    //why box array has to be weird, who knows?
+    //putting this last because it probably leaves the is in the wrong
+    //place
+    readBoxArray(m_grids, headerfile, false);
+ 
+    headerfile.close();
+  }
+    
   void null_deleter_fab_ebg(FabArray<EBGraph>* a_ptr)
   {
   }
@@ -161,38 +232,45 @@ namespace amrex
     BoxArray gridsReCo = m_grids;
     gridsReCo.refine(2);
 
+    int nghostGraph = 1;
+    int nghostData  = 0;
+    int srcGhost = 0;
+  
     DistributionMapping dmco(m_grids);
-    DistributionMapping dmfc(gridsReCo);
+    DistributionMapping dmfc = dmco;
     //need two because of coarsen faces
-    m_graph.define(m_grids, dmco, 1, 2);
-    FabArray<EBGraph> ebgraphReCo(gridsReCo, dmfc, 1, 3);
+    m_graph.define(m_grids, dmco, 1, nghostGraph);
+    FabArray<EBGraph> ebgraphReCo(gridsReCo, dmfc, 1, nghostGraph+1);
+    //pout() << "ebislevel::coarsenvofsandfaces: doing ebgraph copy" << endl;
 
-    int srcGhost =0; int dstGhost = 3;
-    ebgraphReCo.copy(a_fineEBIS.m_graph, 0, 0, 1, srcGhost, dstGhost);
+    ebgraphReCo.copy(a_fineEBIS.m_graph, 0, 0, 1, srcGhost, nghostGraph+1);
     ///first deal with the graph
+    //pout() << "ebislevel::coarsenvofsandfaces: doing coarsenvofs " << endl;
     for (MFIter mfi(m_graph); mfi.isValid(); ++mfi)
     {
       EBGraph      & fineEBGraph = ebgraphReCo[mfi];
       EBGraph      & coarEBGraph = m_graph[mfi];
       const Box    & coarRegion  = mfi.validbox();
       //Box coarRegion2 = m_grids[mfi];
-      
       coarEBGraph.coarsenVoFs(fineEBGraph, coarRegion);
     }
-    m_graph.FillBoundary();
+
+    //pout() << "ebislevel::coarsenvofsandfaces: doing finetocoarse " << endl;
     for (MFIter mfi(m_graph); mfi.isValid(); ++mfi)
     {
       EBGraph      & fineEBGraph = ebgraphReCo[mfi];
       EBGraph      & coarEBGraph = m_graph[mfi];
       const Box    & coarRegion  = mfi.validbox();
+      //pout() << "coarsen faces for box" << coarRegion << endl;
       coarEBGraph.coarsenFaces(fineEBGraph, coarRegion);
+      //pout() << "fixFineToCoarse for box" << coarRegion << endl;
       coarEBGraph.fixFineToCoarse(fineEBGraph, coarRegion);
     }
     //after fixing up fine to coarse, copy info back
-    int numGhost = a_fineEBIS.m_graph.nGrow();
+    //pout() << "ebislevel::doing copy back " << endl;
+    a_fineEBIS.m_graph.copy(ebgraphReCo, 0, 0, 1, srcGhost, nghostGraph);
 
-    a_fineEBIS.m_graph.copy(ebgraphReCo, 0, 0, 1, 0, numGhost);
-
+    //pout() << "out of copyback and making new holders" << endl;
 
     //now deal with the data
     std::shared_ptr<FabArray<EBGraph> > graphptrCoar(&    m_graph, &null_deleter_fab_ebg);
@@ -200,12 +278,17 @@ namespace amrex
     EBDataFactory ebdfCoar(graphptrCoar);
     EBDataFactory ebdfReCo(graphptrReCo);
     FabArray<EBData> ebdataReCo;
-    int nghostData = 1;
 
-    m_data    .define(m_grids  , dmco, 1, 0         , MFInfo(), ebdfCoar);
+    //pout() << "making m_data" << endl;
+    m_data    .define(m_grids  , dmco, 1, nghostData, MFInfo(), ebdfCoar);
+
+    //pout() << "making ebdataReCo" << endl;
     ebdataReCo.define(gridsReCo, dmfc, 1, nghostData, MFInfo(), ebdfReCo);
-    dstGhost = 1;
-    ebdataReCo.copy(a_fineEBIS.m_data, 0, 0, 1, srcGhost, dstGhost);    
+
+    //pout() << "doing ebdatareco copy" << endl;
+    ebdataReCo.copy(a_fineEBIS.m_data, 0, 0, 1, srcGhost, nghostData);    
+
+    //pout() << "coarsening data" << endl;
     for (MFIter mfi(m_graph); mfi.isValid(); ++mfi)
     {
       const EBGraph& fineEBGraph = ebgraphReCo[mfi];
@@ -231,7 +314,8 @@ namespace amrex
       IntVectSet vofsToChange;
       Box valid = mfi.validbox();
       m_graph[mfi].getRegNextToMultiValued(vofsToChange, valid);
-      m_data[ mfi].addFullIrregularVoFs( vofsToChange, valid);
+      m_graph[mfi].addFullIrregularVoFs(vofsToChange);
+      m_data[ mfi].addFullIrregularVoFs(vofsToChange, valid);
 
     }
     m_data .FillBoundary();
