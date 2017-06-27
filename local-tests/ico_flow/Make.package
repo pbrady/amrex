@@ -1,0 +1,2 @@
+f90EXE_sources += hypre_mod.f90 velocity.f90 pressure.f90 timestep.f90 \
+  	       io.f90 simulation.f90 fmain.f90
