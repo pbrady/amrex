@@ -1,7 +1,6 @@
 module timestep_module
-
-  use amrex_base_module
-  use velocity_module
+  use ico_base_module
+  use velocity_module, only: rey
   implicit none
 
   private
@@ -21,6 +20,7 @@ contains
 
     cfl_v = 2.0d0
     cfl_c = 0.8d0
+    ! linker does not properly zero out module variables
     maxtime = 0.0d0
     time = 0.0d0
     dt = 0.0d0
@@ -42,14 +42,23 @@ contains
 
   end subroutine init_timestep
 
-  subroutine predict_timestep(U, V, time_n, timestep, currentstep)
+  subroutine predict_timestep(field, dx, time_n, timestep, currentstep)
     implicit none
-    type(amrex_multifab), intent(in) :: U, V
+    type(amrex_multifab), intent(in) :: field
+    real(amrex_real), intent(in) :: dx
     real(amrex_real), intent(out) :: time_n, timestep
     integer, intent(out) :: currentstep
     !-
-    dt = 0.0d0
+    real(amrex_real) :: dtc, dtv, umax, vmax
 
+    ! viscous timestep restriction
+    dtv = cfl_v * 0.25d0*rey*dx**2
+    ! convective timestep restriction
+    umax = field%norm0(U_i)
+    vmax = field%norm0(V_i)
+    dtc = cfl_c * dx/sqrt(umax**2+vmax**2)
+
+    dt = min(dtc, dtv)
     time_n = time
     timestep = dt
     currentstep = step
